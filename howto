@@ -1,231 +1,70 @@
 #!/usr/bin/env python3
-"""howto - Learn CLI commands by asking in plain English."""
+"""howto - LLM-powered CLI learning assistant (Gemini Flash)."""
 
 import sys
-import re
+import os
+import time
+import google.generativeai as genai
+from rich.console import Console
+from rich.markdown import Markdown
+from rich.panel import Panel
 
-COMMANDS = {
-    # Navigation
-    "go to directory|change directory|move to directory|cd": {
-        "title": "Change Directory",
-        "examples": [
-            ("cd folder_name",        "Move into a folder in the current directory"),
-            ("cd ..",                  "Go up one level to the parent directory"),
-            ("cd ../..",               "Go up two levels"),
-            ("cd ../sibling_folder",   "Go up one level then into a sibling folder"),
-            ("cd ~",                   "Go to your home directory"),
-            ("cd -",                   "Go back to the previous directory"),
-            ("cd /absolute/path",      "Jump to an absolute path from root"),
-        ],
-    },
-    "list files|show files|what is in|contents of": {
-        "title": "List Files",
-        "examples": [
-            ("ls",          "List files in the current directory"),
-            ("ls -l",       "Long format: permissions, size, date"),
-            ("ls -a",       "Include hidden files (starting with .)"),
-            ("ls -lh",      "Long format with human-readable file sizes"),
-            ("ls folder/",  "List files inside a specific folder"),
-        ],
-    },
-    "where am i|current directory|print working": {
-        "title": "Print Working Directory",
-        "examples": [
-            ("pwd", "Show the full path of the directory you're currently in"),
-        ],
-    },
-    # File operations
-    "delete file|remove file": {
-        "title": "Delete a File",
-        "examples": [
-            ("rm filename.txt",    "Delete a single file"),
-            ("rm -i filename.txt", "Ask for confirmation before deleting"),
-            ("rm *.log",           "Delete all .log files in current directory"),
-        ],
-    },
-    "delete directory|remove directory|delete folder|remove folder": {
-        "title": "Delete a Directory",
-        "examples": [
-            ("rm -r folder_name",  "Delete a folder and everything inside it"),
-            ("rm -ri folder_name", "Same, but ask for confirmation at each step"),
-            ("rmdir folder_name",  "Delete an empty folder only"),
-        ],
-    },
-    "create directory|make directory|new folder|mkdir": {
-        "title": "Create a Directory",
-        "examples": [
-            ("mkdir folder_name",        "Create a new folder"),
-            ("mkdir -p a/b/c",           "Create nested folders in one command"),
-            ("mkdir folder1 folder2",    "Create multiple folders at once"),
-        ],
-    },
-    "copy file|duplicate file": {
-        "title": "Copy a File",
-        "examples": [
-            ("cp file.txt copy.txt",       "Copy a file with a new name"),
-            ("cp file.txt folder/",        "Copy a file into a folder"),
-            ("cp -r folder/ destination/", "Copy an entire folder recursively"),
-        ],
-    },
-    "move file|rename file|move folder|rename folder": {
-        "title": "Move or Rename",
-        "examples": [
-            ("mv old.txt new.txt",       "Rename a file"),
-            ("mv file.txt folder/",      "Move a file into a folder"),
-            ("mv folder/ ../",           "Move a folder up one level"),
-            ("mv folder/ ~/Desktop/",    "Move a folder to your Desktop"),
-        ],
-    },
-    "create file|new file|touch": {
-        "title": "Create an Empty File",
-        "examples": [
-            ("touch filename.txt", "Create an empty file (or update its timestamp)"),
-            ("touch a.txt b.txt",  "Create multiple files at once"),
-        ],
-    },
-    "read file|show file|print file|view file|cat": {
-        "title": "View File Contents",
-        "examples": [
-            ("cat file.txt",   "Print the entire file to the terminal"),
-            ("less file.txt",  "Scroll through a file (q to quit)"),
-            ("head file.txt",  "Show the first 10 lines"),
-            ("tail file.txt",  "Show the last 10 lines"),
-            ("tail -f file",   "Follow a file live as it grows (great for logs)"),
-        ],
-    },
-    # Search
-    "find file|search file|locate file": {
-        "title": "Find Files",
-        "examples": [
-            ("find . -name 'file.txt'",      "Find a file by exact name"),
-            ("find . -name '*.py'",          "Find all Python files"),
-            ("find . -type d -name 'logs'",  "Find a directory named 'logs'"),
-            ("find ~ -name '*.pdf'",         "Find all PDFs in your home directory"),
-        ],
-    },
-    "search inside|grep|find text|search text": {
-        "title": "Search Inside Files",
-        "examples": [
-            ("grep 'word' file.txt",       "Find lines containing 'word'"),
-            ("grep -r 'word' folder/",     "Search recursively in a folder"),
-            ("grep -i 'word' file.txt",    "Case-insensitive search"),
-            ("grep -n 'word' file.txt",    "Show line numbers with matches"),
-        ],
-    },
-    # Permissions
-    "permission|make executable|chmod": {
-        "title": "File Permissions",
-        "examples": [
-            ("chmod +x script.sh",    "Make a file executable"),
-            ("chmod 644 file.txt",    "Owner can read/write; others can read"),
-            ("chmod 755 folder/",     "Standard permissions for a directory"),
-            ("ls -l",                 "View permissions of files"),
-        ],
-    },
-    # Processes
-    "running process|list process|what is running": {
-        "title": "View Running Processes",
-        "examples": [
-            ("ps aux",          "List all running processes"),
-            ("top",             "Live view of processes and resource usage"),
-            ("htop",            "Nicer live view (may need: brew install htop)"),
-        ],
-    },
-    "kill process|stop process|end process": {
-        "title": "Kill a Process",
-        "examples": [
-            ("kill PID",        "Stop a process by its ID (get PID from ps aux)"),
-            ("kill -9 PID",     "Force-kill a process"),
-            ("pkill process_name", "Kill by process name"),
-        ],
-    },
-    # Network
-    "download file|curl|wget": {
-        "title": "Download a File",
-        "examples": [
-            ("curl -O https://example.com/file.zip",  "Download a file keeping its name"),
-            ("curl -L -o out.zip https://url",        "Download with a custom filename"),
-        ],
-    },
-    "check network|ping|internet": {
-        "title": "Check Network",
-        "examples": [
-            ("ping google.com",    "Check if a host is reachable (Ctrl+C to stop)"),
-            ("curl -I https://example.com", "Check HTTP response headers"),
-        ],
-    },
-    # Misc
-    "history|previous command|past command": {
-        "title": "Command History",
-        "examples": [
-            ("history",          "Show all past commands"),
-            ("history | grep cd","Search history for a specific command"),
-            ("!!",               "Re-run the last command"),
-            ("!42",              "Re-run command number 42 from history"),
-        ],
-    },
-    "clear screen|clear terminal": {
-        "title": "Clear the Screen",
-        "examples": [
-            ("clear",    "Clear the terminal screen"),
-            ("Ctrl + L", "Keyboard shortcut to clear the screen"),
-        ],
-    },
-    "disk space|storage|how much space": {
-        "title": "Check Disk Space",
-        "examples": [
-            ("df -h",          "Show disk usage for all mounted drives"),
-            ("du -sh folder/", "Show total size of a folder"),
-            ("du -sh *",       "Show size of each item in current directory"),
-        ],
-    },
-    "environment variable|env var|export": {
-        "title": "Environment Variables",
-        "examples": [
-            ("echo $HOME",           "Print the value of a variable"),
-            ("export MY_VAR=hello",  "Set a variable for the current session"),
-            ("env",                  "List all environment variables"),
-            ("printenv PATH",        "Print a specific variable"),
-        ],
-    },
-}
+console = Console()
 
+SYSTEM_PROMPT = """You are a concise command line teacher for macOS/Linux.
+When asked how to do something in the terminal:
+- Give the exact command(s) to use
+- Show a few practical variations if relevant
+- Add a brief explanation of what each does and why
+- Keep it focused and practical — the user is learning as they work
+- Format commands in a code block
+- No fluff, no lengthy intros"""
 
-def search(query: str) -> list[tuple[str, dict]]:
-    q = query.lower()
-    results = []
-    for pattern, data in COMMANDS.items():
-        phrases = [k.strip() for k in pattern.split("|")]
-        # Match if ALL words in any phrase appear in the query
-        if any(all(w in q for w in p.split()) for p in phrases):
-            results.append((pattern, data))
-    return results
+def ask(question: str) -> str:
+    api_key = os.environ.get("GEMINI_API_KEY")
+    if not api_key:
+        console.print("[red]Error: GEMINI_API_KEY not set[/red]")
+        console.print("Run: export GEMINI_API_KEY=your_key")
+        sys.exit(1)
 
-
-def display(matches: list[tuple[str, dict]]) -> None:
-    for _, data in matches:
-        print(f"\n📖  {data['title']}")
-        print("─" * 50)
-        for cmd, desc in data["examples"]:
-            print(f"  {cmd:<40}  # {desc}")
-    print()
-
+    try:
+        genai.configure(api_key=api_key)
+        model = genai.GenerativeModel(
+            model_name="gemini-2.5-flash",
+            system_instruction=SYSTEM_PROMPT,
+        )
+        start_time = time.time()
+        response = model.generate_content(question)
+        elapsed = time.time() - start_time
+        return response.text, elapsed
+    except Exception as e:
+        console.print(f"[red]Error: {e}[/red]")
+        sys.exit(1)
 
 def main():
     if len(sys.argv) < 2:
-        print("Usage: howto <your question>")
-        print('Example: howto "how do I delete a directory"')
+        console.print("[cyan]howto[/cyan] — LLM-powered CLI learning assistant")
+        console.print()
+        console.print("[bold]Usage:[/bold]")
+        console.print("  howto <your question>")
+        console.print()
+        console.print("[bold]Examples:[/bold]")
+        console.print('  howto "how do I delete a directory"')
+        console.print('  howto "move a file to another folder"')
+        console.print('  howto "check what is using port 8080"')
         sys.exit(0)
 
-    query = " ".join(sys.argv[1:])
-    matches = search(query)
+    # Handle help flags
+    if sys.argv[1] in ["-h", "--help", "help"]:
+        sys.argv = [sys.argv[0]]  # Reuse help text above
+        main()
+        return
 
-    if not matches:
-        print(f'\n🤔  No results for "{query}"')
-        print("Try keywords like: delete, copy, move, find, list, permission, process, history\n")
-    else:
-        display(matches)
-
+    question = " ".join(sys.argv[1:])
+    console.print(Panel(f"[bold cyan]{question}[/bold cyan]", style="dim"))
+    result, elapsed = ask(question)
+    console.print(Markdown(result))
+    console.print(f"[dim]({elapsed:.2f}s)[/dim]")
 
 if __name__ == "__main__":
     main()
