@@ -4,6 +4,11 @@
 import sys
 import os
 import time
+import warnings
+
+# Suppress deprecation warnings
+warnings.filterwarnings("ignore", category=FutureWarning)
+
 import google.generativeai as genai
 from rich.console import Console
 from rich.markdown import Markdown
@@ -13,12 +18,20 @@ console = Console()
 
 SYSTEM_PROMPT = """You are a concise command line teacher for macOS/Linux.
 When asked how to do something in the terminal:
-- Give the exact command(s) to use
-- Show a few practical variations if relevant
+- Give the exact command(s) to use in `code blocks`
+- Use **bold** for key terms and parameters
+- Use ### Headers for different sections or variations
 - Add a brief explanation of what each does and why
 - Keep it focused and practical — the user is learning as they work
-- Format commands in a code block
-- No fluff, no lengthy intros"""
+- NO intros or outros. Jump straight to the headers.
+- Format strictly like this:
+  ### Primary Command
+  `command`
+  **Description:** Brief explanation...
+
+  ### Variation
+  `command --flag`
+  **Description:** Brief explanation..."""
 
 def ask(question: str) -> str:
     api_key = os.environ.get("GEMINI_API_KEY")
@@ -61,10 +74,13 @@ def main():
         return
 
     question = " ".join(sys.argv[1:])
-    console.print(Panel(f"[bold cyan]{question}[/bold cyan]", style="dim"))
-    result, elapsed = ask(question)
-    console.print(Markdown(result))
-    console.print(f"[dim]({elapsed:.2f}s)[/dim]")
+    console.print(Panel(f"[bold white]{question}[/bold white]", title="[bold blue]Question[/bold blue]", border_style="blue"))
+    
+    with console.status("[bold green]Thinking...", spinner="dots"):
+        result, elapsed = ask(question)
+        
+    console.print(Panel(Markdown(result, code_theme="monokai"), border_style="green", title="[bold green]Answer[/bold green]"))
+    console.print(f"[dim italic]Completed in {elapsed:.2f}s[/dim italic]")
 
 if __name__ == "__main__":
     main()

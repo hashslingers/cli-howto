@@ -4,6 +4,14 @@ An LLM-powered command line learning tool. Ask it how to do anything in the term
 
 Powered by Google Gemini 2.5 Flash.
 
+## Features
+
+- **Instant Answers:** Get clear, concise terminal commands for any task.
+- **Rich UI:** Beautifully formatted output with color-coded panels for questions and answers.
+- **Syntax Highlighting:** Commands are highlighted using the Monokai theme for better readability.
+- **Thinking Spinner:** Visual feedback while the AI generates your answer.
+- **Privacy First:** Only your question is sent to the AI; your terminal data stays local.
+
 ## Example
 
 ```bash
@@ -17,6 +25,7 @@ howto "check what is using port 8080"
 
 - Python 3.7+
 - A Google Gemini API key (free tier available)
+- `google-generativeai` and `rich` Python libraries
 
 ## Installation
 
