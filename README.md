@@ -39,7 +39,7 @@ cd cli-howto
 ### 2. Install dependencies
 
 ```bash
-pip3 install google-generativeai rich
+pip3 install -r requirements.txt
 ```
 
 ### 3. Get a Gemini API key
@@ -71,6 +71,18 @@ howto --help
 ```
 
 You should see the help text. Open a new terminal tab and you're ready to go.
+
+## Updating
+
+To get the latest features and improvements on any machine where `howto` is installed:
+
+```bash
+cd cli-howto
+git pull
+pip3 install -r requirements.txt
+```
+
+Since the tool is installed via a symbolic link, the `howto` command will automatically point to the updated version.
 
 ## Usage
 
