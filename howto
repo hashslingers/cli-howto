@@ -1,10 +1,12 @@
 #!/usr/bin/env python3
-"""howto - LLM-powered CLI learning assistant (Gemini Flash)."""
+"""howto - LLM-powered CLI learning assistant (Gemini Flash & Local Gemma)."""
 
 import sys
 import os
 import time
 import warnings
+import json
+import urllib.request
 
 # Suppress deprecation warnings
 warnings.filterwarnings("ignore", category=FutureWarning)
@@ -16,7 +18,9 @@ from rich.panel import Panel
 
 console = Console()
 
-SYSTEM_PROMPT = """You are a concise command line teacher for macOS/Linux.
+SYSTEM_PROMPT = """You are an expert command line teacher for macOS/Linux.
+CRITICAL INSTRUCTION: Carefully analyze the user's phrasing. Identify the exact core technology and the specific action before answering. If a user asks a slightly ambiguous question like "set remote git default", realize they are asking about 'git remote' commands, NOT 'git config' global settings.
+
 When asked how to do something in the terminal:
 - Give the exact command(s) to use in `code blocks`
 - Use **bold** for key terms and parameters
@@ -31,9 +35,46 @@ When asked how to do something in the terminal:
 
   ### Variation
   `command --flag`
-  **Description:** Brief explanation..."""
+  **Description:** Brief explanation...
 
-def ask(question: str) -> str:
+EXAMPLES:
+User: "set remote git default"
+Assistant:
+### Set Existing Remote URL
+`git remote set-url origin <url>`
+**Description:** Changes the URL for the default remote named **origin**. Useful if the repository moved.
+
+### Add New Remote
+`git remote add origin <url>`
+**Description:** Adds a new remote repository named **origin**.
+
+User: "kill port 8080"
+Assistant:
+### Find and Kill Process on Port
+`lsof -i :8080 | awk 'NR!=1 {print $2}' | xargs kill -9`
+**Description:** Finds the process running on port **8080** and forcibly kills it."""
+
+def ask_local(question: str) -> tuple[str, float]:
+    url = "http://localhost:11434/api/generate"
+    data = {
+        "model": "gemma2:2b",
+        "system": SYSTEM_PROMPT,
+        "prompt": question,
+        "stream": False
+    }
+    try:
+        req = urllib.request.Request(url, data=json.dumps(data).encode('utf-8'), headers={'Content-Type': 'application/json'})
+        start_time = time.time()
+        with urllib.request.urlopen(req) as response:
+            result = json.loads(response.read().decode('utf-8'))
+            elapsed = time.time() - start_time
+            return result.get("response", ""), elapsed
+    except Exception as e:
+        console.print(f"[red]Error connecting to local model: {e}[/red]")
+        console.print("Ensure Ollama is running and the model is pulled ('ollama pull gemma2:2b').")
+        sys.exit(1)
+
+def ask(question: str) -> tuple[str, float]:
     api_key = os.environ.get("GEMINI_API_KEY")
     if not api_key:
         console.print("[red]Error: GEMINI_API_KEY not set[/red]")
@@ -59,11 +100,11 @@ def main():
         console.print("[cyan]howto[/cyan] — LLM-powered CLI learning assistant")
         console.print()
         console.print("[bold]Usage:[/bold]")
-        console.print("  howto <your question>")
+        console.print("  howto [--remote] <your question>")
         console.print()
         console.print("[bold]Examples:[/bold]")
         console.print('  howto "how do I delete a directory"')
-        console.print('  howto "move a file to another folder"')
+        console.print('  howto --remote "move a file to another folder"')
         console.print('  howto "check what is using port 8080"')
         sys.exit(0)
 
@@ -73,11 +114,28 @@ def main():
         main()
         return
 
+    # Handle remote flag
+    use_local = True
+    if "--remote" in sys.argv:
+        use_local = False
+        sys.argv.remove("--remote")
+    elif "--local" in sys.argv:
+        sys.argv.remove("--local") # Just silently remove if they use it by habit
+
     question = " ".join(sys.argv[1:])
-    console.print(Panel(f"[bold white]{question}[/bold white]", title="[bold blue]Question[/bold blue]", border_style="blue"))
+    
+    if not question.strip():
+        console.print("[red]Error: Please provide a question after the flags.[/red]")
+        sys.exit(1)
+
+    provider = "gemma local" if use_local else "gemini remote"
+    console.print(Panel(f"[bold white]{question}[/bold white]", title=f"[bold blue]Question ({provider})[/bold blue]", border_style="blue"))
     
     with console.status("[bold green]Thinking...", spinner="dots"):
-        result, elapsed = ask(question)
+        if use_local:
+            result, elapsed = ask_local(question)
+        else:
+            result, elapsed = ask(question)
         
     console.print(Panel(Markdown(result, code_theme="monokai"), border_style="green", title="[bold green]Answer[/bold green]"))
     console.print(f"[dim italic]Completed in {elapsed:.2f}s[/dim italic]")
