@@ -1,0 +1,49 @@
+graph TD
+    %% Client Apps Layer (The Adapters)
+    subgraph Clients["Client Apps (Dumb Adapters)"]
+        CLI["💻 CLI Tool (howto)\nSends Text"]
+        VisionApp["📸 Vision App\nSends Image Base64"]
+    end
+
+    %% The Seam (Interface)
+    API(("🌐 JSON REST API\n(The Seam)"))
+    
+    CLI -- "POST /api/ask\n{'query': 'find files'}" --> API
+    VisionApp -- "POST /api/analyze\n{'image': '...'}" --> API
+
+    %% The Daemon Layer (Implementation)
+    subgraph Daemon["Local AI Daemon (FastAPI)"]
+        API --> Router{"Router & Prompt Injector"}
+        
+        Router -- "If Text" --> TextModel
+        Router -- "If Image" --> VisionModel
+        Router -- "If Local Fails" --> CloudFallback
+        
+        TextModel["Local Agentic Output\n(Forces JSON format)"]
+        VisionModel["Local Agentic Output\n(Forces JSON format)"]
+    end
+
+    %% The Engines Layer
+    subgraph Engines["AI Engines"]
+        TextModel -.-> OllamaGemma["🦙 Ollama (Gemma 2B)"]
+        VisionModel -.-> OllamaVision["🦙 Ollama (Llama 3.2 Vision)"]
+        CloudFallback -.-> GeminiCloud["☁️ Google Gemini API"]
+    end
+
+    %% Return Path
+    OllamaGemma -. "JSON Response" .-> Router
+    OllamaVision -. "JSON Response" .-> Router
+    GeminiCloud -. "JSON Response" .-> Router
+    Router -- "Structured JSON" --> API
+    API -- "Parsed Data" --> CLI
+    API -- "Parsed Data" --> VisionApp
+
+    classDef client fill:#e1f5fe,stroke:#3b82f6,stroke-width:2px;
+    classDef daemon fill:#f3e5f5,stroke:#0284c7,stroke-width:2px;
+    classDef engine fill:#fff3e0,stroke:#9333ea,stroke-width:2px;
+    classDef seam fill:#fef08a,stroke:#d97706,stroke-width:3px;
+
+    class CLI,VisionApp client;
+    class Router,TextModel,VisionModel,CloudFallback daemon;
+    class OllamaGemma,OllamaVision,GeminiCloud engine;
+    class API seam;
